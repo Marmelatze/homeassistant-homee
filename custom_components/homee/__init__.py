@@ -19,7 +19,8 @@ from homeassistant.const import (
     ATTR_ARMED, ATTR_BATTERY_LEVEL, ATTR_LAST_TRIP_TIME, ATTR_TRIPPED,
     EVENT_HOMEASSISTANT_STOP)
 from homeassistant.helpers.entity import Entity
-from custom_components.homee.util import get_attr_by_type
+from pyhomee.const import CANodeStateAvailable, ATTRIBUTE_TYPES
+from .util import get_attr_by_type, get_attr_type
 
 REQUIREMENTS = ['https://github.com/twendt/pyhomee/archive/master.zip#pyhomee==0.0.2']
 
@@ -29,11 +30,25 @@ DOMAIN = 'homee'
 
 HOMEE_CUBE = None
 
+# attributes that are not added as sensors
+DISCOVER_SENSOR_ATTRIBUTES = [
+    'DimmingLevel',
+    'OnOff',
+    'Color',
+    'OpenClose',
+    'Temperature',
+    'TargetTemperature',
+    'BatteryLowAlarm',
+    'LinkQuality',
+    'IdentificationMode',
+    'SoftwareRevision'
+]
+
 CONF_CUBE = 'cube'
 CONF_USERNAME = 'username'
 CONF_PASSWORD = 'password'
 
-HOMEE_ID_FORMAT = '{}_{}_{}_{}'
+HOMEE_ID_FORMAT = '{}_{}'
 
 HOMEE_NODES = {}
 HOMEE_ATTRIBUTES = defaultdict(list)
@@ -49,7 +64,7 @@ CONFIG_SCHEMA = vol.Schema({
 }, extra=vol.ALLOW_EXTRA)
 
 HOMEE_COMPONENTS = [
-    'sensor', 'switch', 'light', 'cover'
+    'sensor', 'switch', 'light', 'cover', 'climate', 'binary_sensor'
 ]
 
 SERVICE_PLAY_HOMEEGRAM = 'play_homeegram'
@@ -64,6 +79,7 @@ SERVICE_DESCRIPTIONS = {
         },
     },
 }
+
 
 # pylint: disable=unused-argument, too-many-function-args
 def setup(hass, base_config):
@@ -80,7 +96,6 @@ def setup(hass, base_config):
     def play_homeegram(call):
         id = call.data.get("homeegram_id")
         HOMEE_CUBE.play_homeegram(id)
-    
 
     config = base_config.get(DOMAIN)
 
@@ -93,8 +108,7 @@ def setup(hass, base_config):
     HOMEE_CUBE = HomeeCube(hostname, username, password)
     hass.bus.listen_once(EVENT_HOMEASSISTANT_STOP, stop_subscription)
 
-    hass.services.register(DOMAIN, SERVICE_PLAY_HOMEEGRAM, play_homeegram,
-                      description=SERVICE_DESCRIPTIONS.get(SERVICE_PLAY_HOMEEGRAM))
+    #hass.services.register(DOMAIN, SERVICE_PLAY_HOMEEGRAM, play_homeegram)
 
     try:
         all_nodes = HOMEE_CUBE.get_nodes()
@@ -106,65 +120,82 @@ def setup(hass, base_config):
     group = HOMEE_CUBE.get_group_by_name(HOMEE_IMPORT_GROUP)
     if group:
         group_node_ids = HOMEE_CUBE.get_group_node_ids(group.id)
-        nodes = [ node for node in all_nodes if node.id in group_node_ids ]
+        nodes = [node for node in all_nodes if node.id in group_node_ids]
     else:
         nodes = all_nodes
 
-    for node in nodes:
-        if node.id == -1:
-            continue
-        HOMEE_NODES[node.id] = node
-        node_type = map_homee_node(node)
-        for attribute in node.attributes:
-            if attribute.type == const.SWITCH:
-                _LOGGER.info("Node type: %s", node_type)
-                HOMEE_ATTRIBUTES[node_type].append(attribute)
-            elif attribute.type == const.COVER_POSITION:
-                HOMEE_ATTRIBUTES[node_type].append(attribute)
-            else:
-                HOMEE_ATTRIBUTES['sensor'].append(attribute)
+    devices = get_devices(nodes)
 
     for component in HOMEE_COMPONENTS:
-        discovery.load_platform(hass, component, DOMAIN, {}, base_config)
+        discovery.load_platform(hass, component, DOMAIN, {
+            'devices': devices[component]
+        }, base_config)
 
     return True
+
+def get_devices(nodes):
+    """Get HASS devices form homee nodes"""
+    devices = defaultdict(list)
+    for node in nodes:
+        HOMEE_NODES[node.id] = node
+        node_type = map_homee_node(node)
+        if node_type:
+            devices[node_type].append({'node': node})
+        for attribute in node.attributes:
+            if get_attr_type(attribute) not in DISCOVER_SENSOR_ATTRIBUTES:
+                devices['sensor'].append({'node': node, 'attribute': attribute})
+
+    return devices
+
 
 def map_homee_node(node):
     """Map homee nodes to Home Assistant types."""
     from pyhomee import const
-    attr_types = [ attr.type for attr in node.attributes ]
-    if const.BRIGHTNESS in attr_types and const.SWITCH in attr_types:
+    if node.profile in const.PROFILE_TYPES[const.DISCOVER_LIGHTS]:
         return 'light'
-    if const.SWITCH in attr_types:
+    if node.profile in const.PROFILE_TYPES[const.DISCOVER_CLIMATE]:
+        return 'climate'
+    if node.profile in const.PROFILE_TYPES[const.DISCOVER_BINARY_SENSOR]:
+        return 'binary_sensor'
+    if node.profile in const.PROFILE_TYPES[const.DISCOVER_SWITCH]:
         return 'switch'
+
+    attr_types = [attr.type for attr in node.attributes]
     if const.COVER_POSITION in attr_types:
         return 'cover'
-#    if isinstance(vera_device, veraApi.VeraThermostat):
-#        return 'climate'
-#    if isinstance(vera_device, veraApi.VeraCurtain):
-#        return 'cover'
-    return 'sensor'
+
 
 class HomeeDevice(Entity):
     """Representation of a Homee device entity."""
 
-    def __init__(self, homee_node, homee_attribute, cube):
+    def __init__(self, homee_node, cube):
         """Initialize the device."""
-        self.homee_node = homee_node
-        self.homee_attribute = homee_attribute
+        self._homee_node = homee_node
         self.cube = cube
 
-        self._name = self.homee_node.name
-        _LOGGER.info(self.homee_attribute.id)
+        self._name = self._homee_node.name
         # Append device id to prevent name clashes in HA.
-        self.homee_id = HOMEE_ID_FORMAT.format(
-            slugify(self._name), self.homee_node.id, self.homee_attribute.id, self.homee_attribute.type)
+        if self._homee_node.id == -1:
+            self.homee_id = "homee"
+        else:
+            self.homee_id = HOMEE_ID_FORMAT.format(
+                slugify(self._name), self._homee_node.id)
+        self.attributes = dict()
+        for attribute in homee_node.attributes:
+            attr_type = get_attr_type(attribute)
+            self.attributes[attr_type] = attribute
 
-        self.cube.register(self.homee_node, self._update_callback)
+        self.cube.register(self._homee_node, self._update_callback)
 
-    def _update_callback(self, attribute):
+    def _update_callback(self, node, attribute):
         """Update the state."""
-        self.update_state(attribute)
+        if node is not None:
+            self._homee_node = node
+        if attribute is not None:
+            attr_type = get_attr_type(attribute)
+            self.attributes[attr_type] = attribute
+
+            self.update_state(attribute)
         self.schedule_update_ha_state()
 
     @property
@@ -174,13 +205,34 @@ class HomeeDevice(Entity):
 
     @property
     def should_poll(self):
-        """Get polling requirement from vera device."""
-        return 
+        return False
+
+    @property
+    def available(self):
+        return self._homee_node.state == CANodeStateAvailable
+
+    def get_attr_value(self, attr_type, default=None):
+        attr = self.get_attr(attr_type)
+        if attr is None:
+            return default
+        return attr.value
+
+    def get_attr(self, attr_type):
+        return self.attributes.get(attr_type)
+
+    def has_attr(self, attr_type):
+        return attr_type in self.attributes
 
     @property
     def device_state_attributes(self):
         """Return the state attributes of the device."""
         attr = {}
+        for attr_type, attribute in self.attributes.items():
+            attr[attr_type] = attribute.value
+        if self.has_attr('BatteryLowAlarm'):
+            attr['battery_level'] = 100 if self.get_attr_value('BatteryLowAlarm', 0) == 0 else 0
 
         return attr
 
+    def update_state(self, attribute):
+        pass

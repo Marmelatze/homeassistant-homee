@@ -8,10 +8,8 @@ import logging
 
 from homeassistant.components.cover import (
     CoverDevice, ENTITY_ID_FORMAT)
-from homeassistant.const import (STATE_OFF, STATE_ON)
 from custom_components.homee import (
     HOMEE_NODES, HOMEE_ATTRIBUTES, HOMEE_CUBE, HomeeDevice)
-from custom_components.homee.util import get_attr_by_type
 
 DEPENDENCIES = ['homee']
 
@@ -30,10 +28,9 @@ class HomeeCover(HomeeDevice, CoverDevice):
 
     def __init__(self, homee_node, homee_attribute, cube):
         """Initialize the cover."""
-        from pyhomee import const
         self.attribute_id = homee_attribute.id
         self.position = homee_attribute.value
-        HomeeDevice.__init__(self, homee_node, homee_attribute, cube)
+        HomeeDevice.__init__(self, homee_node, cube)
         self.entity_id = ENTITY_ID_FORMAT.format(self.homee_id)
         self.update_state(homee_attribute)
 
@@ -58,7 +55,7 @@ class HomeeCover(HomeeDevice, CoverDevice):
 
     def set_cover_position(self, position, **kwargs):
         """Move the cover to a specific position."""
-        self.cube.send_node_command(self.homee_node, self.homee_attribute, position)
+        self.cube.send_node_command(self._homee_node, self.homee_attribute, position)
 
     @property
     def is_closed(self):
@@ -71,11 +68,11 @@ class HomeeCover(HomeeDevice, CoverDevice):
 
     def open_cover(self, **kwargs):
         """Open the cover."""
-        self.cube.send_node_command(self.homee_node, self.homee_attribute, 0)
+        self.cube.send_node_command(self._homee_node, self.homee_attribute, 0)
 
     def close_cover(self, **kwargs):
         """Close the cover."""
-        self.cube.send_node_command(self.homee_node, self.homee_attribute, 100)
+        self.cube.send_node_command(self._homee_node, self.homee_attribute, 100)
 
     def stop_cover(self, **kwargs):
         """Stop the cover."""
