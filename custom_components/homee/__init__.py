@@ -8,21 +8,17 @@ import logging
 from collections import defaultdict
 
 import voluptuous as vol
-
 from requests.exceptions import RequestException
 
-from homeassistant.util.dt import utc_from_timestamp
-from homeassistant.util import (convert, slugify)
-from homeassistant.helpers import discovery
-from homeassistant.helpers import config_validation as cv
 from homeassistant.const import (
-    ATTR_ARMED, ATTR_BATTERY_LEVEL, ATTR_LAST_TRIP_TIME, ATTR_TRIPPED,
     EVENT_HOMEASSISTANT_STOP)
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import discovery
 from homeassistant.helpers.entity import Entity
-from pyhomee.const import CANodeStateAvailable, ATTRIBUTE_TYPES
+from homeassistant.util import (slugify)
 from .util import get_attr_by_type, get_attr_type
 
-REQUIREMENTS = ['https://github.com/Marmelatze/pyhomee/archive/v0.0.3.zip#pyhomee==0.0.2']
+REQUIREMENTS = ['https://github.com/Marmelatze/pyhomee/archive/v0.0.3.zip#pyhomee==0.0.3']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,7 +82,6 @@ def setup(hass, base_config):
     """Set up for Vera devices."""
     global HOMEE_CUBE
     from pyhomee import HomeeCube
-    from pyhomee import const
 
     def stop_subscription(event):
         """Shutdown Homee subscriptions and subscription thread on exit."""
@@ -209,6 +204,7 @@ class HomeeDevice(Entity):
 
     @property
     def available(self):
+        from pyhomee.const import CANodeStateAvailable
         return self._homee_node.state == CANodeStateAvailable
 
     def get_attr_value(self, attr_type, default=None):

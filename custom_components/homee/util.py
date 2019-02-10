@@ -1,4 +1,3 @@
-from pyhomee.const import ATTRIBUTE_TYPES_LOOKUP
 
 
 def get_attr_by_type(node, type):
@@ -10,4 +9,5 @@ def get_attr_by_type(node, type):
 
 def get_attr_type(attr):
     """get attribute name by its type"""
+    from pyhomee.const import ATTRIBUTE_TYPES_LOOKUP
     return ATTRIBUTE_TYPES_LOOKUP.get(attr.type, ATTRIBUTE_TYPES_LOOKUP[0])

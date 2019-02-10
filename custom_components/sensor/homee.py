@@ -7,12 +7,11 @@ https://home-assistant.io/components/sensor.homee/
 import logging
 import re
 
-from homeassistant.helpers.entity import Entity
-from homeassistant.components.sensor import ENTITY_ID_FORMAT
 from custom_components.homee import (
-    HomeeDevice, HOMEE_ATTRIBUTES, HOMEE_CUBE)
+    HomeeDevice, HOMEE_CUBE, get_attr_type)
+from homeassistant.components.sensor import ENTITY_ID_FORMAT
+from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
-from homee import get_attr_type
 
 DEPENDENCIES = ['homee']
 
@@ -32,6 +31,7 @@ class HomeeSensor(HomeeDevice, Entity):
 
     def __init__(self, homee_node, homee_attribute, cube):
         """Initialize the sensor."""
+
         self.homee_attribute = homee_attribute
         self.current_value = homee_attribute.value
         self.attribute_id = homee_attribute.id
