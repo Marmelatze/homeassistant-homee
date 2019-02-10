@@ -22,7 +22,7 @@ from homeassistant.helpers.entity import Entity
 from pyhomee.const import CANodeStateAvailable, ATTRIBUTE_TYPES
 from .util import get_attr_by_type, get_attr_type
 
-REQUIREMENTS = ['https://github.com/twendt/pyhomee/archive/master.zip#pyhomee==0.0.2']
+REQUIREMENTS = ['https://github.com/Marmelatze/pyhomee/archive/v0.0.3.zip#pyhomee==0.0.2']
 
 _LOGGER = logging.getLogger(__name__)
 
