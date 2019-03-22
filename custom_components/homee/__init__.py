@@ -123,7 +123,7 @@ def setup(hass, base_config):
 
     for component in HOMEE_COMPONENTS:
         discovery.load_platform(hass, component, DOMAIN, {
-            'devices': devices[component]
+            'devices': devices[component],
         }, base_config)
 
     return True

@@ -16,7 +16,7 @@ Add directories from `custom_components` to Homeassistant `custom_components`:
 
 ````bash
 cd config/custom_components
-ln -s $PATH_TO_HOMEASSISTANT_HOMEE/homeassistant-homee/custom_components/{binary_sensor,climate,cover,homee,light,sensor,switch} .
+ln -s $PATH_TO_HOMEASSISTANT_HOMEE/homeassistant-homee/custom_components/home .
 ````
 
 Add IP and credentails to `configuration.yaml`:

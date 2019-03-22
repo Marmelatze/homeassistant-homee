@@ -6,8 +6,9 @@ https://home-assistant.io/components/climate.homee/
 """
 import logging
 
-from homeassistant.components.climate import ClimateDevice, SUPPORT_TARGET_TEMPERATURE, SUPPORT_OPERATION_MODE, \
-    ENTITY_ID_FORMAT, STATE_HEAT, STATE_COOL
+from homeassistant.components.climate import ClimateDevice, ENTITY_ID_FORMAT
+from homeassistant.components.climate.const import SUPPORT_TARGET_TEMPERATURE, SUPPORT_OPERATION_MODE, \
+    STATE_HEAT, STATE_COOL
 from custom_components.homee import HOMEE_CUBE, HomeeDevice
 from homeassistant.const import TEMP_CELSIUS, ATTR_TEMPERATURE
 
