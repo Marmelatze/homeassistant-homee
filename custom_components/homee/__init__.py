@@ -103,7 +103,7 @@ def setup(hass, base_config):
     HOMEE_CUBE = HomeeCube(hostname, username, password)
     hass.bus.listen_once(EVENT_HOMEASSISTANT_STOP, stop_subscription)
 
-    #hass.services.register(DOMAIN, SERVICE_PLAY_HOMEEGRAM, play_homeegram)
+    hass.services.register(DOMAIN, SERVICE_PLAY_HOMEEGRAM, play_homeegram)
 
     try:
         all_nodes = HOMEE_CUBE.get_nodes()
