@@ -16,7 +16,7 @@ DEPENDENCIES = ['homee']
 _LOGGER = logging.getLogger(__name__)
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
+async def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     """Perform the setup for Vera controller devices."""
     devices = []
     for data in discovery_info['devices']:
@@ -26,17 +26,17 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
         if node.profile == const.CANodeProfileDoubleOnOffSwitch:
             state_attributes = list(filter(lambda a: a.type == const.ATTRIBUTE_TYPES['OnOff'], node.attributes))
             for idx, attr in enumerate(state_attributes):
-                devices.append(HomeeSwitch(node, HOMEE_CUBE, idx, attr))
+                devices.append(HomeeSwitch(hass, node, HOMEE_CUBE, idx, attr))
         else:
-            devices.append(HomeeSwitch(node, HOMEE_CUBE))
-    add_devices(devices)
+            devices.append(HomeeSwitch(hass, node, HOMEE_CUBE))
+    async_add_devices(devices)
 
 class HomeeSwitch(HomeeDevice, SwitchDevice):
     """Representation of a Homee Switch."""
 
-    def __init__(self, homee_node, cube, idx=0, state_attr=None):
+    def __init__(self, hass, homee_node, cube, idx=0, state_attr=None):
         """Initialize the switch."""
-        HomeeDevice.__init__(self, homee_node, cube)
+        HomeeDevice.__init__(self, hass, homee_node, cube)
         if state_attr is not None:
             self._state_attr = state_attr
             # make sure OnOff attribute is the selected
@@ -54,14 +54,13 @@ class HomeeSwitch(HomeeDevice, SwitchDevice):
         if attribute.id == self._state_attr.id:
             self._state = attribute.value
 
-
-    def turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs):
         """Turn device on."""
-        self.cube.send_node_command(self._homee_node, self._state_attr, 1)
+        await self.cube.send_node_command(self._homee_node, self._state_attr, 1)
 
-    def turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs):
         """Turn device off."""
-        self.cube.send_node_command(self._homee_node, self._state_attr, 0)
+        await self.cube.send_node_command(self._homee_node, self._state_attr, 0)
 
     @property
     def is_on(self):

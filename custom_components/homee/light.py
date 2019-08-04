@@ -17,36 +17,36 @@ DEPENDENCIES = ['homee']
 _LOGGER = logging.getLogger(__name__)
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
+async def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     """Perform the setup for Vera controller devices."""
     devices = []
     for attribute in HOMEE_ATTRIBUTES['light']:
-        devices.append(HomeeLight(HOMEE_NODES[attribute.node_id], HOMEE_CUBE))
-    add_devices(devices)
+        devices.append(HomeeLight(hass, HOMEE_NODES[attribute.node_id], HOMEE_CUBE))
+    async_add_devices(devices)
 
 
 class HomeeLight(HomeeDevice, Light):
     """Representation of a Homee Light."""
 
-    def __init__(self, homee_node, cube):
+    def __init__(self, hass, homee_node, cube):
         """Initialize the switch."""
-        HomeeDevice.__init__(self, homee_node, cube)
+        HomeeDevice.__init__(self, hass, homee_node, cube)
         self.entity_id = ENTITY_ID_FORMAT.format(self.homee_id)
 
     def update_state(self, attribute):
         """"""
 
-    def turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs):
         """Turn device on."""
         if ATTR_BRIGHTNESS in kwargs and self.has_attr('DimmingLevel'):
-            self.cube.send_node_command(self._homee_node, self.get_attr('DimmingLevel'),
+            await self.cube.send_node_command(self._homee_node, self.get_attr('DimmingLevel'),
                                         (kwargs[ATTR_BRIGHTNESS] / 255) * 100)
         else:
-            self.cube.send_node_command(self._homee_node, self.get_attr('OnOff'), 1)
+            await self.cube.send_node_command(self._homee_node, self.get_attr('OnOff'), 1)
 
-    def turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs):
         """Turn device off."""
-        self.cube.send_node_command(self._homee_node, self.get_attr('OnOff'), 0)
+        await self.cube.send_node_command(self._homee_node, self.get_attr('OnOff'), 0)
 
     @property
     def is_on(self):

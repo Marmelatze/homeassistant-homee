@@ -1,0 +1,8 @@
+{
+  "domain": "homee",
+  "name": "Homee integration",
+  "documentation": "https://github.com/Marmelatze/homeassistant-homee",
+  "dependencies": ["pyhomee"],
+  "codeowners": ["@Marmelatze"],
+  "requirements": []
+}

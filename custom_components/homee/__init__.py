@@ -4,21 +4,21 @@ Support for Homee
 For more details about this component, please refer to the documentation at
 https://home-assistant.io/components/homee/
 """
+import asyncio
 import logging
 from collections import defaultdict
 
 import voluptuous as vol
-from requests.exceptions import RequestException
 
-from homeassistant.const import (
-    EVENT_HOMEASSISTANT_STOP)
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import discovery
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import (slugify)
 from .util import get_attr_by_type, get_attr_type
 
-REQUIREMENTS = ['https://github.com/Marmelatze/pyhomee/archive/v0.0.3.zip#pyhomee==0.0.3']
+REQUIREMENTS = ['pyhomee==0.0.4']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,37 +60,31 @@ CONFIG_SCHEMA = vol.Schema({
 }, extra=vol.ALLOW_EXTRA)
 
 HOMEE_COMPONENTS = [
-    'sensor', 'switch', 'light', 'cover', 'climate', 'binary_sensor'
+    'sensor', 'switch', 'light', 'cover', 'climate', 'binary_sensor', 'homee'
 ]
 
-SERVICE_PLAY_HOMEEGRAM = 'play_homeegram'
-SERVICE_DESCRIPTIONS = {
-    "play_homeegram": {
-        "description": "Play Homeegram",
-        "fields": {
-            "homeegram_id": {
-                "description": "The homeegram id",
-                "example": "27",
-            },
-        },
-    },
-}
 
-
-# pylint: disable=unused-argument, too-many-function-args
-def setup(hass, base_config):
+async def async_setup(hass, base_config):
     """Set up for Vera devices."""
     global HOMEE_CUBE
     from pyhomee import HomeeCube
+    task = None
 
     def stop_subscription(event):
         """Shutdown Homee subscriptions and subscription thread on exit."""
-        _LOGGER.info("Shutting down subscriptions")
-        HOMEE_CUBE.stop()
+        _LOGGER.info("Shutting down homee websocket")
+        if task is not None:
+            task.cancel()
 
-    def play_homeegram(call):
+    async def play_homeegram(call):
         id = call.data.get("homeegram_id")
-        HOMEE_CUBE.play_homeegram(id)
+        await HOMEE_CUBE.play_homeegram(id)
+
+    async def set_mode(call):
+        mode = call.data.get("mode")
+        component = hass.get_component("homee.cube")
+        await component.set_mode(mode)
+
 
     config = base_config.get(DOMAIN)
 
@@ -98,54 +92,53 @@ def setup(hass, base_config):
     hostname = config.get(CONF_CUBE)
     username = config.get(CONF_USERNAME)
     password = config.get(CONF_PASSWORD)
+    hass.services.async_register(DOMAIN, "play_homeegram", play_homeegram)
+    #hass.services.async_register(DOMAIN, "set_mode", set_mode)
 
     # Initialize the Homee Cube
     HOMEE_CUBE = HomeeCube(hostname, username, password)
-    hass.bus.listen_once(EVENT_HOMEASSISTANT_STOP, stop_subscription)
+    HOMEE_CUBE.register_all(create_handle_node_callback(hass, base_config))
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, stop_subscription)
 
-    hass.services.register(DOMAIN, SERVICE_PLAY_HOMEEGRAM, play_homeegram)
+    task = asyncio.get_event_loop().create_task(HOMEE_CUBE.run())
 
-    try:
-        all_nodes = HOMEE_CUBE.get_nodes()
-    except RequestException:
-        # There was a network related error connecting to the Vera controller.
-        _LOGGER.exception("Error communicating with Homee")
-        return False
+    #hass.services.async_register(DOMAIN, "set_mode", set_mode)
 
-    group = HOMEE_CUBE.get_group_by_name(HOMEE_IMPORT_GROUP)
-    if group:
-        group_node_ids = HOMEE_CUBE.get_group_node_ids(group.id)
-        nodes = [node for node in all_nodes if node.id in group_node_ids]
-    else:
-        nodes = all_nodes
 
-    devices = get_devices(nodes)
-
-    for component in HOMEE_COMPONENTS:
-        discovery.load_platform(hass, component, DOMAIN, {
-            'devices': devices[component],
-        }, base_config)
 
     return True
 
-def get_devices(nodes):
-    """Get HASS devices form homee nodes"""
-    devices = defaultdict(list)
-    for node in nodes:
+
+def create_handle_node_callback(hass, base_config):
+    @callback
+    async def handle_node_callback(node):
+        if node.id in HOMEE_NODES:
+            return
+        _LOGGER.info("Discovered new node %s: %s" % (node.id, node.name))
         HOMEE_NODES[node.id] = node
+        devices = defaultdict(list)
         node_type = map_homee_node(node)
         if node_type:
             devices[node_type].append({'node': node})
         for attribute in node.attributes:
-            if get_attr_type(attribute) not in DISCOVER_SENSOR_ATTRIBUTES:
+            if get_attr_type(attribute) not in DISCOVER_SENSOR_ATTRIBUTES and node.id != -1:
                 devices['sensor'].append({'node': node, 'attribute': attribute})
 
-    return devices
+        discover_routines = []
+        for component in HOMEE_COMPONENTS:
+            if len(devices[component]) > 0:
+                hass.async_create_task(discovery.async_load_platform(hass, component, DOMAIN, {
+                    'devices': devices[component],
+                }, base_config))
+        #asyncio.gather(*discover_routines))
+    return handle_node_callback
 
 
 def map_homee_node(node):
     """Map homee nodes to Home Assistant types."""
     from pyhomee import const
+    if node.id == -1:
+        return 'sensor'
     if node.profile in const.PROFILE_TYPES[const.DISCOVER_LIGHTS]:
         return 'light'
     if node.profile in const.PROFILE_TYPES[const.DISCOVER_CLIMATE]:
@@ -159,11 +152,10 @@ def map_homee_node(node):
     if const.COVER_POSITION in attr_types:
         return 'cover'
 
-
 class HomeeDevice(Entity):
     """Representation of a Homee device entity."""
 
-    def __init__(self, homee_node, cube):
+    def __init__(self, hass, homee_node, cube):
         """Initialize the device."""
         self._homee_node = homee_node
         self.cube = cube
@@ -182,7 +174,7 @@ class HomeeDevice(Entity):
 
         self.cube.register(self._homee_node, self._update_callback)
 
-    def _update_callback(self, node, attribute):
+    async def _update_callback(self, node, attribute):
         """Update the state."""
         if node is not None:
             self._homee_node = node
@@ -191,7 +183,7 @@ class HomeeDevice(Entity):
             self.attributes[attr_type] = attribute
 
             self.update_state(attribute)
-        self.schedule_update_ha_state()
+        return self.async_schedule_update_ha_state()
 
     @property
     def name(self):
@@ -218,6 +210,9 @@ class HomeeDevice(Entity):
 
     def has_attr(self, attr_type):
         return attr_type in self.attributes
+
+    async def set_attr(self, attr_type, value):
+        await self.cube.send_node_command(self._homee_node, self.get_attr(attr_type), value)
 
     @property
     def device_state_attributes(self):

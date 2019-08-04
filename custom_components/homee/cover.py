@@ -16,12 +16,12 @@ DEPENDENCIES = ['homee']
 _LOGGER = logging.getLogger(__name__)
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
+async def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     """Perform the setup for Vera controller devices."""
     devices = []
     for attribute in HOMEE_ATTRIBUTES['cover']:
-        devices.append(HomeeCover(HOMEE_NODES[attribute.node_id], attribute, HOMEE_CUBE))
-    add_devices(devices)
+        devices.append(HomeeCover(hass, HOMEE_NODES[attribute.node_id], attribute, HOMEE_CUBE))
+    async_add_devices(devices)
 
 class HomeeCover(HomeeDevice, CoverDevice):
     """Representation of a Homee Cover."""
@@ -30,7 +30,7 @@ class HomeeCover(HomeeDevice, CoverDevice):
         """Initialize the cover."""
         self.attribute_id = homee_attribute.id
         self.position = homee_attribute.value
-        HomeeDevice.__init__(self, homee_node, cube)
+        HomeeDevice.__init__(self, hass, homee_node, cube)
         self.entity_id = ENTITY_ID_FORMAT.format(self.homee_id)
         self.update_state(homee_attribute)
 
@@ -53,9 +53,9 @@ class HomeeCover(HomeeDevice, CoverDevice):
             return 0
         return (self.position-100)*-1
 
-    def set_cover_position(self, position, **kwargs):
+    async def async_set_cover_position(self, position, **kwargs):
         """Move the cover to a specific position."""
-        self.cube.send_node_command(self._homee_node, self.homee_attribute, position)
+        await self.cube.send_node_command(self._homee_node, self.homee_attribute, position)
 
     @property
     def is_closed(self):
@@ -66,13 +66,13 @@ class HomeeCover(HomeeDevice, CoverDevice):
             else:
                 return True
 
-    def open_cover(self, **kwargs):
+    async def async_open_cover(self, **kwargs):
         """Open the cover."""
-        self.cube.send_node_command(self._homee_node, self.homee_attribute, 0)
+        await self.cube.send_node_command(self._homee_node, self.homee_attribute, 0)
 
-    def close_cover(self, **kwargs):
+    async def async_close_cover(self, **kwargs):
         """Close the cover."""
-        self.cube.send_node_command(self._homee_node, self.homee_attribute, 100)
+        await self.cube.send_node_command(self._homee_node, self.homee_attribute, 100)
 
     def stop_cover(self, **kwargs):
         """Stop the cover."""

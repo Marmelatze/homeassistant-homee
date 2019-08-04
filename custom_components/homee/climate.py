@@ -4,11 +4,13 @@ Support for Homee sensors.
 For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/climate.homee/
 """
+import asyncio
 import logging
+from typing import List
 
 from homeassistant.components.climate import ClimateDevice, ENTITY_ID_FORMAT
-from homeassistant.components.climate.const import SUPPORT_TARGET_TEMPERATURE, SUPPORT_OPERATION_MODE, \
-    STATE_HEAT, STATE_COOL
+from homeassistant.components.climate.const import SUPPORT_TARGET_TEMPERATURE, SUPPORT_PRESET_MODE, CURRENT_HVAC_HEAT, \
+    CURRENT_HVAC_COOL, CURRENT_HVAC_OFF
 from custom_components.homee import HOMEE_CUBE, HomeeDevice
 from homeassistant.const import TEMP_CELSIUS, ATTR_TEMPERATURE
 
@@ -17,12 +19,12 @@ DEPENDENCIES = ['homee']
 _LOGGER = logging.getLogger(__name__)
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
+async def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     """Perform the setup for Vera controller devices."""
     devices = []
     for data in discovery_info['devices']:
-        devices.append(HomeeThermostat(data['node'], HOMEE_CUBE))
-    add_devices(devices)
+        devices.append(HomeeThermostat(hass, data['node'], HOMEE_CUBE))
+    async_add_devices(devices)
 
 
 class HomeeThermostat(HomeeDevice, ClimateDevice):
@@ -30,7 +32,7 @@ class HomeeThermostat(HomeeDevice, ClimateDevice):
     def supported_features(self):
         """Return the list of supported features."""
         if self.has_attr('CurrentValvePosition'):
-            return SUPPORT_TARGET_TEMPERATURE | SUPPORT_OPERATION_MODE
+            return SUPPORT_TARGET_TEMPERATURE
         return SUPPORT_TARGET_TEMPERATURE
 
     @property
@@ -62,24 +64,28 @@ class HomeeThermostat(HomeeDevice, ClimateDevice):
         return 30.5
 
     @property
-    def current_operation(self):
+    def hvac_mode(self) -> str:
         position = self.get_attr_value('CurrentValvePosition')
         if position is None:
-            return None
+            return CURRENT_HVAC_OFF
         elif position > 0:
-            return STATE_HEAT
+            return CURRENT_HVAC_HEAT
         else:
-            return STATE_COOL
+            return CURRENT_HVAC_COOL
 
-    def __init__(self, homee_node, cube):
-        HomeeDevice.__init__(self, homee_node, cube)
+    @property
+    def hvac_modes(self) -> List[str]:
+        return [CURRENT_HVAC_OFF, CURRENT_HVAC_COOL, CURRENT_HVAC_HEAT]
+
+    def __init__(self, hass, homee_node, cube):
+        HomeeDevice.__init__(self, hass, homee_node, cube)
         self.entity_id = ENTITY_ID_FORMAT.format(self.homee_id)
 
     def update_state(self, attribute):
         """Update the state."""
 
-    def set_temperature(self, **kwargs):
+    async def async_set_temperature(self, **kwargs):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return None
-        self.cube.send_node_command(self._homee_node, self.get_attr('TargetTemperature'), temperature)
+        await self.cube.send_node_command(self._homee_node, self.get_attr('TargetTemperature'), temperature)

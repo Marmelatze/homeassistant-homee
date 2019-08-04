@@ -1,0 +1,12 @@
+play_homeegram:
+  description: Play Homeegram
+  fields:
+    homeegram_id:
+      description: The homeegram id
+      example: 27
+
+set_mode:
+  description: Set Homee mode
+  fields:
+    mode:
+      description: "Homee mode (home|away|sleeping|vacation)"
